@@ -13,7 +13,7 @@ const protocol = ""
 const origin = "https://api.slack.com/"
 
 type Connection struct {
-	conn *websocket.Conn
+	ws *websocket.Conn
 }
 
 func (c *Connection) Init(token string) error {
@@ -44,7 +44,7 @@ func (c *Connection) Init(token string) error {
 		return err
 	}
 
-	c.conn, err = websocket.Dial(respObj.Url, protocol, origin)
+	c.ws, err = websocket.Dial(respObj.Url, protocol, origin)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (c *Connection) Init(token string) error {
 }
 
 func (c *Connection) Close() error {
-	err := c.conn.Close()
+	err := c.ws.Close()
 	return err
 }
 
@@ -61,7 +61,7 @@ func (c *Connection) GetMessage() string {
 	var e event
 	for {
 		buf := make([]byte, 2048)
-		n, err := c.conn.Read(buf)
+		n, err := c.ws.Read(buf)
 		if err != nil || n == 0 {
 			continue
 		}

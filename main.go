@@ -16,13 +16,13 @@ func main() {
 	err := conn.Init(os.Args[1])
 	if err != nil {
 		fmt.Printf("Error while connecting to slack: %s\n", err)
-	} else {
-		fmt.Println("Connected to slack")
+		os.Exit(0)
+	}
 
-		for {
-			msg := conn.GetMessage()
-			fmt.Printf("Received: %s\n", msg)
-		}
-		conn.Close()
+	fmt.Println("Connected to slack")
+	defer conn.Close()
+	for {
+		msg := conn.GetMessage()
+		fmt.Printf("Received: %s\n", msg)
 	}
 }
