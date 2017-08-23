@@ -12,17 +12,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	conn := slack.Connection{}
-	err := conn.Init(os.Args[1])
-	if err != nil {
-		fmt.Printf("Error while connecting to slack: %s\n", err)
-		os.Exit(0)
-	}
+	conn := slack.Connect(os.Args[1])
 
 	fmt.Println("Connected to slack")
-	defer conn.Close()
-	for {
-		msg := conn.GetMessage()
-		fmt.Printf("Received: %s\n", msg)
+	defer conn.Dispose()
+
+	for msg := range conn.Messages {
+		fmt.Printf("Received: %s\n", msg.Text)
+		go handleMessage(&msg)
 	}
+}
+
+func handleMessage(m *slack.Message) {
+	m.Respond("Hei på deg!")
 }

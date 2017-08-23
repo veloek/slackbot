@@ -1,87 +1,49 @@
 package slack
 
 import (
-	"encoding/json"
-	"fmt"
-	"golang.org/x/net/websocket"
-	"io/ioutil"
-	"net/http"
+	nlopes "github.com/nlopes/slack"
 )
 
-const apiUrl = "https://slack.com/api/rtm.connect?token=%s"
-const protocol = ""
-const origin = "https://api.slack.com/"
+func Connect(token string) *Connection {
+	client := nlopes.New(token)
+	rtm := client.NewRTM()
+	go rtm.ManageConnection()
+
+	conn := &Connection{
+		client:   client,
+		rtm:      rtm,
+		Messages: make(chan Message, 50),
+	}
+	go conn.readEvents()
+
+	return conn
+}
 
 type Connection struct {
-	ws *websocket.Conn
+	client   *nlopes.Client
+	rtm      *nlopes.RTM
+	botInfo  *nlopes.Info
+	Messages chan Message
 }
 
-func (c *Connection) Init(token string) error {
-	url := fmt.Sprintf(apiUrl, token)
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != 200 {
-		err = fmt.Errorf("API failed with status code: %d", resp.StatusCode)
-		return err
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return err
-	}
-
-	var respObj rtmResponse
-	err = json.Unmarshal(body, &respObj)
-	if err != nil {
-		return err
-	}
-
-	if !respObj.Ok {
-		err = fmt.Errorf("Slack error: %s", respObj.Error)
-		return err
-	}
-
-	c.ws, err = websocket.Dial(respObj.Url, protocol, origin)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (c *Connection) Close() error {
-	err := c.ws.Close()
+func (c *Connection) Dispose() error {
+	err := c.rtm.Disconnect()
 	return err
 }
 
-func (c *Connection) GetMessage() string {
-	var e event
-	for {
-		buf := make([]byte, 2048)
-		n, err := c.ws.Read(buf)
-		if err != nil || n == 0 {
-			continue
-		}
-		data := buf[:n]
-
-		err = json.Unmarshal(data, &e)
-		if err != nil {
-			fmt.Printf("Error while unmarshaling event: %s\n", err)
-			continue
-		}
-		//fmt.Printf("DEBUG: Event type = %s\n", e.Type)
-
-		if e.Type == "message" && e.Subtype == "" {
-			var m message
-			err = json.Unmarshal(data, &m)
-			if err != nil {
-				fmt.Printf("Error while unmarshaling message: %s\n", err)
-				continue
+func (c *Connection) readEvents() {
+	for msg := range c.rtm.IncomingEvents {
+		switch ev := msg.Data.(type) {
+		case *nlopes.MessageEvent:
+			if ev.SubType == "" && isDirectMessage(ev) {
+				c.Messages <- Message{conn: c, channel: ev.Channel, Text: ev.Text}
 			}
-			return m.Text
+		default:
+			// Not handling other kinds of events for now
 		}
 	}
+}
+
+func isDirectMessage(ev *nlopes.MessageEvent) bool {
+	return ev.Channel[:1] == "D"
 }
